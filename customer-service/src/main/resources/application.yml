@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: customer-service
+  datasource:
+    url: jdbc:postgresql://34.50.83.192:5444/source-db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+server:
+  port: 8888
+

@@ -1,0 +1,4 @@
+rootProject.name = 'kafka-debezium'
+
+include('customer-service')
+include('sync-service')

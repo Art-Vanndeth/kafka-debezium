@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: sync-service
+
+  datasource:
+    url: jdbc:postgresql://34.50.83.192:5445/target-db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    consumer:
+      bootstrap-servers: 34.50.83.192:9092
+      group-id: customer-sync-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+
+server:
+  port: 8889
