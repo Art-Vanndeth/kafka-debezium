@@ -24,6 +24,7 @@ repositories {
 }
 
 dependencies {
+	implementation 'io.debezium:debezium-connector-postgres:2.7.3.Final'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.kafka:spring-kafka'
