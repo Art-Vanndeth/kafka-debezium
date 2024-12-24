@@ -2,15 +2,25 @@ spring:
   application:
     name: customer-service
   datasource:
-    url: jdbc:postgresql://34.50.83.192:5444/source-db
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://206.189.159.20:5432/sourcedb
+    username: user
+    password: password
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+debezium:
+  database:
+    hostname: source-db
+    port: 5432
+    user: user
+    password: password
+    dbname: sourcedb
+
+
 server:
   port: 8888
 

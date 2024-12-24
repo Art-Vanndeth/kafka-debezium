@@ -17,7 +17,7 @@ public class CustomerSyncListener {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @KafkaListener(topics = "mytopic.public.customer", groupId = "sync-service-group")
+    @KafkaListener(topics = "source.public.customer", groupId = "sync-service-group")
     public void consume(ConsumerRecord<String, String> record) {
         try {
             // Check if the message payload is not null or empty
