@@ -5,67 +5,120 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.dcoder.syncservice.model.Customer;
 import dev.dcoder.syncservice.repository.CustomerRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Stream;
+
 @Service
 public class CustomerSyncListener {
+    private static final Logger log = LoggerFactory.getLogger(CustomerSyncListener.class);
 
-    @Autowired
-    private CustomerRepository customerRepository;
+    private final CustomerRepository customerRepository;
+    private final ObjectMapper objectMapper;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Enum for CDC operations
+    private enum Operation {
+        CREATE("c"),
+        UPDATE("u"),
+        DELETE("d");
+
+        private final String code;
+
+        Operation(String code) {
+            this.code = code;
+        }
+
+        static Optional<Operation> fromCode(String code) {
+            return Stream.of(values())
+                    .filter(op -> op.code.equals(code))
+                    .findFirst();
+        }
+    }
+
+    public CustomerSyncListener(CustomerRepository customerRepository, ObjectMapper objectMapper) {
+        this.customerRepository = customerRepository;
+        this.objectMapper = objectMapper;
+    }
 
     @KafkaListener(topics = "mytopic.public.customer", groupId = "sync-service-group")
     public void consume(ConsumerRecord<String, String> record) {
         try {
-            // Check if the message payload is not null or empty
-            if (record.value() == null || record.value().isEmpty()) {
-                System.err.println("Received null or empty message");
-                return;
-            }
-
-            // Parse the JSON event received from Kafka
-            JsonNode jsonNode = objectMapper.readTree(record.value());
-
-            // Extract the 'op' (operation) field
-            String operation = jsonNode.path("payload").path("op").asText();
-
-            // Handle Insert/Update (using 'after') and Delete (using 'before')
-            if ("c".equals(operation) || "u".equals(operation)) {
-                // Insert or Update case - use 'after' field
-                JsonNode afterNode = jsonNode.path("payload").path("after");
-                if (!afterNode.isMissingNode()) {
-                    // Map the 'after' field to a Customer entity
-                    Long id = afterNode.path("id").asLong();
-                    String firstName = afterNode.path("first_name").asText();
-                    String lastName = afterNode.path("last_name").asText();
-                    String email = afterNode.path("email").asText();
-
-                    // Create or update the Customer in the sync-service database
-                    Customer customer = new Customer(id, firstName, lastName, email);
-                    customerRepository.save(customer);
-                }
-
-            } else if ("d".equals(operation)) {
-                // Delete case - use 'before' field
-                JsonNode beforeNode = jsonNode.path("payload").path("before");
-                if (!beforeNode.isMissingNode()) {
-                    // Extract ID from 'before' node
-                    Long id = beforeNode.path("id").asLong();
-
-                    // Delete the Customer from the sync-service database
-                    customerRepository.deleteById(id);
-                    System.out.println("Deleted Customer with ID: " + id);
-                }
-            } else {
-                System.err.println("Unknown operation type: " + operation);
-            }
-
+            processRecord(record)
+                    .ifPresent(this::handleOperation);
         } catch (Exception e) {
-            e.printStackTrace();  // Add proper logging here
+            log.error("Error processing Kafka record: {}", record.value(), e);
         }
     }
-}
 
+    private Optional<ProcessedRecord> processRecord(ConsumerRecord<String, String> record) {
+        return Optional.ofNullable(record.value())
+                .filter(value -> !value.isEmpty())
+                .map(this::parseJson)
+                .map(this::extractProcessedRecord);
+    }
+
+    private JsonNode parseJson(String value) {
+        try {
+            return objectMapper.readTree(value);
+        } catch (Exception e) {
+            log.error("Failed to parse JSON: {}", value, e);
+            throw new RuntimeException("JSON parsing failed", e);
+        }
+    }
+
+    private ProcessedRecord extractProcessedRecord(JsonNode jsonNode) {
+        JsonNode payload = jsonNode.path("payload");
+        String operationCode = payload.path("op").asText();
+        return new ProcessedRecord(
+                Operation.fromCode(operationCode),
+                payload.path("after"),
+                payload.path("before")
+        );
+    }
+
+    private void handleOperation(ProcessedRecord record) {
+        record.operation.ifPresent(op -> {
+            switch (op) {
+                case CREATE, UPDATE -> handleUpsert(record.afterNode);
+                case DELETE -> handleDelete(record.beforeNode);
+                default -> log.warn("Unsupported operation: {}", op);
+            }
+        });
+    }
+
+    private void handleUpsert(JsonNode node) {
+        if (!node.isMissingNode()) {
+            Customer customer = extractCustomer(node);
+            customerRepository.save(customer);
+            log.info("Inserted Customer: {}", customer);
+        }
+    }
+
+    private void handleDelete(JsonNode node) {
+        if (!node.isMissingNode()) {
+            Long id = node.path("id").asLong();
+            customerRepository.deleteById(id);
+            log.info("Deleted Customer with ID: {}", id);
+        }
+    }
+
+    private Customer extractCustomer(JsonNode node) {
+        return new Customer(
+                node.path("id").asLong(),
+                node.path("first_name").asText(),
+                node.path("last_name").asText(),
+                node.path("email").asText()
+        );
+    }
+
+    private record ProcessedRecord(
+            Optional<Operation> operation,
+            JsonNode afterNode,
+            JsonNode beforeNode
+    ) {}
+}

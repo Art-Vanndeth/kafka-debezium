@@ -11,6 +11,37 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+debezium:
+  name: postgres-connector
+  connector:
+    class: io.debezium.connector.postgresql.PostgresConnector
+  tasks:
+    max: 1
+  database:
+    hostname: source-db
+    port: 5432
+    user: user
+    password: password
+    dbname: sourcedb
+    server-name: source
+  schema:
+    include-list: public
+  plugin:
+    name: pgoutput
+  slot:
+    name: debezium_slot
+  publication:
+    name: debezium_pub
+  tables:
+    include-list: public.customer
+  kafka:
+    bootstrap-servers: broker:9092
+    topic:
+      schema-changes: schema-changes.customer
+      prefix: mytopic
+
+
 server:
   port: 8888
 
